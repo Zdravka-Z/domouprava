@@ -5,7 +5,7 @@ import datetime
 st.set_page_config(page_title="Дигитална Домоуправа", page_icon="🏢", layout="wide")
 
 # Имейл на домоуправителя (променете го с вашия истински имейл)
-ADMIN_EMAIL = "zdravkka@mail.bg"
+ADMIN_EMAIL = "zdravkka@gmail.com"
 
 # 1. ИНИЦИАЛИЗАЦИЯ НА БАЗАТА ДАННИ
 if "database" not in st.session_state:
