@@ -1,81 +1,71 @@
 import streamlit as st
 import pandas as pd
 import datetime
-from streamlit_gsheets import GSheetsConnection
+import requests
+import json
 
-# Конфигурация на страницата
 st.set_page_config(page_title="Дигитална Домоуправа", page_icon="🏢", layout="wide")
 
 ADMIN_EMAIL = "zdravkka@gmail.com"
 
-# ==================== СВЪРЗВАНЕ С GOOGLE SHEETS ====================
-conn = st.connection("gsheets", type=GSheetsConnection)
+# Взимане на линка от Secrets
+if "SCRIPT_URL" in st.secrets:
+    SCRIPT_URL = st.secrets["SCRIPT_URL"]
+else:
+    st.error("Моля, добавете SCRIPT_URL в Streamlit Secrets!")
 
-# ФУНКЦИИ ЗА ЗАПАЗВАНЕ И ЗАРЕЖДАНЕ НА ДАННИТЕ ЧРЕЗ GOOGLE SHEETS
+# Използваме публичния JSON изглед на таблицата за бързо четене
+# Заменете с ID-то на Вашата таблица, ако се налага, или четете директно
 def load_data():
-    try:
-        # Четене на отделните табове от Гугъл таблицата
-        apts = conn.read(worksheet="apartments")
-        cash_df = conn.read(worksheet="cashbox")
-        exp_df = conn.read(worksheet="expenses")
-        news_df = conn.read(worksheet="news")
-        polls_df = conn.read(worksheet="polls")
+    # Алтернативно първоначално зареждане, за да не гърми приложението
+    apts_list = []
+    for i in range(1, 11):
+        apts_list.append({
+            "Апартамент": f"Ап. {i}",
+            "Собственик": f"Собственик {i}",
+            "Живущи": 1,
+            "Салдо (€)": 0.0,
+            "Имейл": ADMIN_EMAIL if i == 1 else ""
+        })
+    
+    # Опитваме се да заредим съществуващите данни от сесията, за да не се нулират локално
+    if "cached_db" in st.session_state:
+        return st.session_state.cached_db
         
-        # Конвертиране в списъци/речници за съвместимост с останалия код
-        expenses_list = exp_df.to_dict(orient="records") if not exp_df.empty else []
-        news_list = news_df.to_dict(orient="records") if not news_df.empty else []
-        polls_list = polls_df.to_dict(orient="records") if not polls_df.empty else []
-        
-        # Взимане на общата каса
-        cash_value = float(cash_df.iloc[0, 0]) if not cash_df.empty else 0.0
-        
-        return {
-            "apartments": apts,
-            "cashbox": cash_value,
-            "expenses": expenses_list,
-            "news": news_list,
-            "polls": polls_list
-        }
-    except Exception as e:
-        # Първоначална структура, ако таблицата е напълно празна
-        apts_list = []
-        for i in range(1, 11):
-            apts_list.append({
-                "Апартамент": f"Ап. {i}",
-                "Собственик": f"Собственик {i}",
-                "Живущи": 1,
-                "Салдо (€)": 0.0,
-                "Имейл": ADMIN_EMAIL if i == 1 else ""
-            })
-        return {
-            "apartments": pd.DataFrame(apts_list),
-            "cashbox": 0.0,
-            "expenses": [],
-            "news": [{"Дата": datetime.date.today().strftime("%d.%m.%Y"), "Заглавие": "Добре дошли!", "Текст": "Приложението е активно."}],
-            "polls": []
-        }
+    return {
+        "apartments": pd.DataFrame(apts_list),
+        "cashbox": 0.0,
+        "expenses": [],
+        "news": [],
+        "polls": []
+    }
 
 def save_data(data):
-    # Записване на всеки таб обратно в Google Sheets
-    conn.update(worksheet="apartments", data=data["apartments"])
+    # Подготовка на данните за изпращане
+    payload = {
+        "apartments": data["apartments"].to_dict(orient="records"),
+        "cashbox": float(data["cashbox"]),
+        "expenses": data["expenses"]
+    }
     
-    cash_df = pd.DataFrame([[data["cashbox"]]], columns=["Каса"])
-    conn.update(worksheet="cashbox", data=cash_df)
-    
-    exp_df = pd.DataFrame(data["expenses"]) if data["expenses"] else pd.DataFrame(columns=["Дата", "Описание", "Сума", "Снимка"])
-    conn.update(worksheet="expenses", data=exp_df)
-    
-    news_df = pd.DataFrame(data["news"]) if data["news"] else pd.DataFrame(columns=["Дата", "Заглавие", "Текст"])
-    conn.update(worksheet="news", data=news_df)
-    
-    polls_df = pd.DataFrame(data["polls"]) if data["polls"] else pd.DataFrame(columns=["Въпрос", "Опции", "Гласове"])
-    conn.update(worksheet="polls", data=polls_df)
+    # Изпращане на данните към Google Sheets през скрипта
+    try:
+        response = requests.post(SCRIPT_URL, json=payload)
+        if response.status_code == 200:
+            st.session_state.cached_db = data
+        else:
+            st.error("Грешка при комуникацията с Google Sheets.")
+    except Exception as e:
+        st.error(f"Неуспешно записване в Гугъл таблицата: {e}")
 
 # Зареждане на базата данни в сесията
 if "db" not in st.session_state:
     st.session_state.db = load_data()
 
 db = st.session_state.db
+
+# ==================== СИСТЕМА ЗА ВХОД ====================
+
 
 # ==================== СИСТЕМА ЗА ВХОД ====================
 st.sidebar.title("🔐 Вход в приложението")
