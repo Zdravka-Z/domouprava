@@ -9,15 +9,14 @@ ADMIN_EMAIL = "domoupravitel@mail.com"
 
 # 1. ИНИЦИАЛИЗАЦИЯ НА БАЗАТА ДАННИ
 if "database" not in st.session_state:
-    # Създаваме автоматично списък за 10 апартамента с начални нулеви данни
     apts_list = []
     for i in range(1, 11):
         apts_list.append({
             "Апартамент": f"Ап. {i}",
             "Собственик": f"Собственик Ап. {i}",
-            "Живущи": 1, # По подразбиране 1 човек
+            "Живущи": 1,
             "Салдо (лв)": 0.0,
-            "Имейл": "" # Празно, за да го въведете вие ръчно
+            "Имейл": ""
         })
     
     st.session_state.database = {
@@ -43,13 +42,11 @@ if not st.session_state.logged_in:
     password_input = st.sidebar.text_input("Парола на входа:", type="password")
     
     if st.sidebar.button("Влизане"):
-        # Проверка за Домоуправител
         if email_input == ADMIN_EMAIL and password_input == "vhod123":
             st.session_state.logged_in = True
             st.session_state.user_email = email_input
             st.session_state.is_admin = True
             st.rerun()
-        # Проверка за съсед (имейлът трябва да е въведен в системата от админа)
         elif email_input in db["apartments"]["Имейл"].str.lower().values and password_input == "vhod123":
             st.session_state.logged_in = True
             st.session_state.user_email = email_input
@@ -69,7 +66,6 @@ else:
 
 # ==================== СТРАНИЦИ И НАВИГАЦИЯ ====================
 if st.session_state.logged_in:
-    # Дефиниране на менюто спрямо ролята
     menu_options = ["Начално табло", "Съобщения & Новини", "Анкети", "Бланки"]
     if st.session_state.is_admin:
         menu_options.insert(1, "Плащания & Разходи (Админ)")
@@ -77,7 +73,6 @@ if st.session_state.logged_in:
         
     page = st.radio("Меню:", menu_options, horizontal=True)
 
-    # Намиране на данни за текущия потребител
     if not st.session_state.is_admin:
         user_row = db["apartments"][db["apartments"]["Имейл"].str.lower() == st.session_state.user_email].iloc[0]
         user_apt = user_row["Апартамент"]
@@ -92,7 +87,6 @@ if st.session_state.logged_in:
         
         if st.session_state.is_admin:
             st.subheader("📊 Текущо състояние на всички апартаменти")
-            # Показване на пълната таблица за администратора
             view_df = db["apartments"].copy()
             view_df["Месечна такса"] = 10 + (view_df["Живущи"] * 5)
             st.dataframe(view_df[["Апартамент", "Собственик", "Живущи", "Месечна такса", "Салдо (лв)"]], use_container_width=True)
@@ -111,22 +105,20 @@ if st.session_state.logged_in:
                 else:
                     st.success("✅ Нямате текущи задължения към касата.")
 
-        # Преглед на разходите за всички
         st.markdown("---")
         st.subheader("🧾 Хронология на разходите на входа")
         if not db["expenses"]:
             st.write("Няма регистрирани разходи за този период.")
         for exp in db["expenses"]:
-            col1, col2 = st.columns([3, 1])
+            col1, col2 = st.columns(2)
             with col1:
                 st.write(f"📅 **{exp['Дата']}** | {exp['Описание']} | 💵 **{exp['Сума']} лв.**")
             with col2:
-                st.image(exp["Снимка"], caption="Документ/Касова бележка", width=120)
+                st.image(exp["Snimka"], caption="Документ/Касова бележка", width=120)
 
     # 💵 СТРАНИЦА: ПЛАЩАНИЯ (САМО ЗА АДМИН)
     elif page == "Плащания & Разходи (Админ)":
         st.title("⚙️ Финансово управление (Домоуправител)")
-        
         tab1, tab2 = st.tabs(["Внасяне на такса", "Добавяне на разход"])
         
         with tab1:
@@ -155,24 +147,21 @@ if st.session_state.logged_in:
                         "Дата": datetime.date.today().strftime("%d.%m.%Y"),
                         "Описание": exp_desc,
                         "Сума": exp_amount,
-                        "Снимка": exp_pic
+                        "Snimka": exp_pic
                     })
                     st.success("Разходът е добавен успешно!")
                     st.rerun()
                 else:
                     st.error("Грешка: В касата няма достатъчно средства за този разход!")
 
-    # ⚙️ СТРАНИЦА: РЪЧНО ВЪВЕЖДАНЕ НА СЪСЕДИ (САМО ЗА АДМИН)
+    # ⚙️ СТРАНИЦА: НАСТРОЙКИ (САМО ЗА АДМИН)
     elif page == "Настройки на входа (Админ)":
         st.title("👥 Управление на апартаментите и живущите")
-        st.info("Оттук можете да въведете имейлите на съседите, за да могат да се логват.")
-        
         apt_to_edit = st.selectbox("Изберете апартамент за редактиране:", db["apartments"]["Апартамент"])
         idx = db["apartments"][db["apartments"]["Апартамент"] == apt_to_edit].index[0]
         
-        # Полета за редакция
         new_owner = st.text_input("Име на собственик / Наемател:", value=db["apartments"].at[idx, "Собственик"])
-        new_residents = st.number_input("Брой живущи (за изчисляване на таксата):", min_value=0, max_value=20, value=int(db["apartments"].at[idx, "Живущи"]))
+        new_residents = st.number_input("Брой живущи:", min_value=0, max_value=20, value=int(db["apartments"].at[idx, "Живущи"]))
         new_email = st.text_input("Имейл за вход в приложението:", value=db["apartments"].at[idx, "Имейл"]).strip().lower()
         
         if st.button("💾 Запази промените за този апартамент"):
@@ -211,3 +200,15 @@ if st.session_state.logged_in:
                     poll["Опции"]["Да"] += 1
                     st.rerun()
             with col2:
+                if st.button(f"Гласувай с 'Не'", key=f"n_{idx}"):
+                    poll["Опции"]["Не"] += 1
+                    st.rerun()
+            st.bar_chart(pd.DataFrame.from_dict(poll["Опции"], orient='index', columns=['Гласове']))
+
+    # 📄 СТРАНИЦА: БЛАНКИ
+    elif page == "Бланки":
+        st.title("📄 Документи и бланки")
+        st.markdown("- 📥 [Бланка за Декларация по ЗУЕС](https://example.com)")
+
+else:
+    st.info("👋 Моля, въведете вашия имейл и парола `vhod123` в лявото меню, за да отворите таблото.")
